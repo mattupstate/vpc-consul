@@ -108,3 +108,24 @@
   handlers:
     - name: restart consul
       supervisorctl: name=consul state=restarted
+
+- hosts: consul_lead
+  remote_user: ubuntu
+  sudo: yes
+
+  vars:
+    consul_bootstrap: False
+    consul_join: 10.0.32.4
+
+  tasks:
+  - name: Get EC2 facts
+    action: ec2_facts
+
+  - name: Create Consul config
+    template: src=templates/consul.json dest={{ consul_config_dir }}/consul.json
+    notify:
+      - restart consul
+
+  handlers:
+    - name: restart consul
+      supervisorctl: name=consul state=restarted
