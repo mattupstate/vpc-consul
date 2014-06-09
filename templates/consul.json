@@ -1,0 +1,12 @@
+{
+    {% if consul_bootstrap %}"bootstrap": true,
+    {% endif %}
+
+    {% if consul_join %}"start_join": ["{{ consul_join }}"],
+    {%- endif %}
+
+    "server": true,
+    "data_dir": "{{ consul_data_dir }}",
+    "datacenter": "{{ ansible_ec2_placement_region }}",
+    "recursor": "10.0.0.2"
+}

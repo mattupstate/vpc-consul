@@ -1,0 +1,1356 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09", 
+    "Description": "A VPC stack that includes public and private subnets with a Consul cluster for DNS, service discovery and configuration management", 
+    "Mappings": {
+        "AWSNATAMI": {
+            "ap-northeast-1": {
+                "AMI": "ami-ad227cc4"
+            }, 
+            "ap-southeast-1": {
+                "AMI": "ami-ad227cc4"
+            }, 
+            "ap-southeast-2": {
+                "AMI": "ami-ad227cc4"
+            }, 
+            "eu-west-1": {
+                "AMI": "ami-ad227cc4"
+            }, 
+            "sa-east-1": {
+                "AMI": "ami-ad227cc4"
+            }, 
+            "us-east-1": {
+                "AMI": "ami-ad227cc4"
+            }, 
+            "us-west-1": {
+                "AMI": "ami-ad227cc4"
+            }, 
+            "us-west-2": {
+                "AMI": "ami-ad227cc4"
+            }
+        }, 
+        "UBUNTUAMI": {
+            "ap-northeast-1": {
+                "AMI": "ami-19dd9218"
+            }, 
+            "ap-southeast-1": {
+                "AMI": "ami-506d3102"
+            }, 
+            "ap-southeast-2": {
+                "AMI": "ami-7bb8dd41"
+            }, 
+            "eu-west-1": {
+                "AMI": "ami-cb4986bc"
+            }, 
+            "sa-east-1": {
+                "AMI": "ami-8f0aa692"
+            }, 
+            "us-east-1": {
+                "AMI": "ami-408c7f28"
+            }, 
+            "us-west-1": {
+                "AMI": "ami-a26265e7"
+            }, 
+            "us-west-2": {
+                "AMI": "ami-f34032c3"
+            }
+        }
+    }, 
+    "Outputs": {
+        "BastionIPAddress": {
+            "Description": "IP address of the bastion host", 
+            "Value": {
+                "Fn::GetAtt": [
+                    "BastionHost", 
+                    "PublicIp"
+                ]
+            }
+        }
+    }, 
+    "Parameters": {
+        "AvailabilityZones": {
+            "Default": "a,b,e", 
+            "Description": "A list of three availability zone letters to distribute the subnets across.", 
+            "Type": "CommaDelimitedList"
+        }, 
+        "BastionInstanceType": {
+            "AllowedValues": [
+                "t1.micro", 
+                "m1.small", 
+                "m1.medium", 
+                "m1.large", 
+                "m1.xlarge", 
+                "m2.xlarge", 
+                "m2.2xlarge", 
+                "m2.4xlarge", 
+                "m3.xlarge", 
+                "m3.2xlarge", 
+                "c1.medium", 
+                "c1.xlarge", 
+                "cc1.4xlarge", 
+                "cc2.8xlarge", 
+                "cg1.4xlarge"
+            ], 
+            "ConstraintDescription": "must be a valid EC2 instance type.", 
+            "Default": "m1.small", 
+            "Description": "Bastion EC2 instance type", 
+            "Type": "String"
+        }, 
+        "ConsulInstanceType": {
+            "AllowedValues": [
+                "t1.micro", 
+                "m1.small", 
+                "m1.medium", 
+                "m1.large", 
+                "m1.xlarge", 
+                "m2.xlarge", 
+                "m2.2xlarge", 
+                "m2.4xlarge", 
+                "m3.xlarge", 
+                "m3.2xlarge", 
+                "c1.medium", 
+                "c1.xlarge", 
+                "cc1.4xlarge", 
+                "cc2.8xlarge", 
+                "cg1.4xlarge"
+            ], 
+            "ConstraintDescription": "must be a valid EC2 instance type.", 
+            "Default": "m1.small", 
+            "Description": "Consul EC2 instance type", 
+            "Type": "String"
+        }, 
+        "KeyName": {
+            "Description": "Name of an existing EC2 KeyPair to enable SSH access", 
+            "Type": "String"
+        }, 
+        "NATInstanceType": {
+            "AllowedValues": [
+                "t1.micro", 
+                "m1.small", 
+                "m1.medium", 
+                "m1.large", 
+                "m1.xlarge", 
+                "m2.xlarge", 
+                "m2.2xlarge", 
+                "m2.4xlarge", 
+                "m3.xlarge", 
+                "m3.2xlarge", 
+                "c1.medium", 
+                "c1.xlarge", 
+                "cc1.4xlarge", 
+                "cc2.8xlarge", 
+                "cg1.4xlarge"
+            ], 
+            "ConstraintDescription": "must be a valid EC2 instance type.", 
+            "Default": "m1.small", 
+            "Description": "NAT Device EC2 instance type", 
+            "Type": "String"
+        }
+    }, 
+    "Resources": {
+        "BastionHost": {
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "UBUNTUAMI", 
+                        {
+                            "Ref": "AWS::Region"
+                        }, 
+                        "AMI"
+                    ]
+                }, 
+                "InstanceType": {
+                    "Ref": "BastionInstanceType"
+                }, 
+                "KeyName": {
+                    "Ref": "KeyName"
+                }, 
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": "true", 
+                        "DeleteOnTermination": "true", 
+                        "Description": "ENI for bastion host", 
+                        "DeviceIndex": 0, 
+                        "GroupSet": [
+                            {
+                                "Ref": "BastionSecurityGroup"
+                            }
+                        ], 
+                        "SubnetId": {
+                            "Ref": "PublicSubnet0"
+                        }
+                    }
+                ], 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "BastionHost"
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::Instance"
+        }, 
+        "BastionSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Enables access to the bastion host", 
+                "SecurityGroupEgress": [
+                    {
+                        "CidrIp": "10.0.0.0/24", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }, 
+                    {
+                        "CidrIp": "10.0.1.0/24", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }, 
+                    {
+                        "CidrIp": "10.0.2.0/24", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }, 
+                    {
+                        "CidrIp": "10.0.16.0/20", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }, 
+                    {
+                        "CidrIp": "10.0.32.0/20", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }, 
+                    {
+                        "CidrIp": "10.0.48.0/20", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 80, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 80
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 443, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 443
+                    }
+                ], 
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }
+                ], 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "BastionSecurityGroup"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::SecurityGroup"
+        }, 
+        "ConsulHost1": {
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "UBUNTUAMI", 
+                        {
+                            "Ref": "AWS::Region"
+                        }, 
+                        "AMI"
+                    ]
+                }, 
+                "InstanceType": {
+                    "Ref": "ConsulInstanceType"
+                }, 
+                "KeyName": {
+                    "Ref": "KeyName"
+                }, 
+                "NetworkInterfaces": [
+                    {
+                        "DeleteOnTermination": "true", 
+                        "Description": "ENI for Consul host", 
+                        "DeviceIndex": 0, 
+                        "GroupSet": [
+                            {
+                                "Ref": "ConsulSecurityGroup"
+                            }
+                        ], 
+                        "PrivateIpAddress": "10.0.16.4", 
+                        "SubnetId": {
+                            "Ref": "PrivateSubnet0"
+                        }
+                    }
+                ], 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "ConsulHost1"
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::Instance"
+        }, 
+        "ConsulHost2": {
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "UBUNTUAMI", 
+                        {
+                            "Ref": "AWS::Region"
+                        }, 
+                        "AMI"
+                    ]
+                }, 
+                "InstanceType": {
+                    "Ref": "ConsulInstanceType"
+                }, 
+                "KeyName": {
+                    "Ref": "KeyName"
+                }, 
+                "NetworkInterfaces": [
+                    {
+                        "DeleteOnTermination": "true", 
+                        "Description": "ENI for Consul host", 
+                        "DeviceIndex": 0, 
+                        "GroupSet": [
+                            {
+                                "Ref": "ConsulSecurityGroup"
+                            }
+                        ], 
+                        "PrivateIpAddress": "10.0.32.4", 
+                        "SubnetId": {
+                            "Ref": "PrivateSubnet1"
+                        }
+                    }
+                ], 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "ConsulHost2"
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::Instance"
+        }, 
+        "ConsulHost3": {
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "UBUNTUAMI", 
+                        {
+                            "Ref": "AWS::Region"
+                        }, 
+                        "AMI"
+                    ]
+                }, 
+                "InstanceType": {
+                    "Ref": "ConsulInstanceType"
+                }, 
+                "KeyName": {
+                    "Ref": "KeyName"
+                }, 
+                "NetworkInterfaces": [
+                    {
+                        "DeleteOnTermination": "true", 
+                        "Description": "ENI for Consul host", 
+                        "DeviceIndex": 0, 
+                        "GroupSet": [
+                            {
+                                "Ref": "ConsulSecurityGroup"
+                            }
+                        ], 
+                        "PrivateIpAddress": "10.0.48.4", 
+                        "SubnetId": {
+                            "Ref": "PrivateSubnet2"
+                        }
+                    }
+                ], 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "ConsulHost3"
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::Instance"
+        }, 
+        "ConsulSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Enables internal access to Consul", 
+                "SecurityGroupEgress": [
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 53, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 53
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 80, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 80
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 443, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 443
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8400, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 8400
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8500, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 8500
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8600, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 8600
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8300, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 8302
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8300, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 8302
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 53, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 53
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8400, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 8400
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8500, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 8500
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8600, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 8600
+                    }
+                ], 
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 53, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 53
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8400, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 8400
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8500, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 8500
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8600, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 8600
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8300, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 8302
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8300, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 8302
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 53, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 53
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8400, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 8400
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8500, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 8500
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 8600, 
+                        "IpProtocol": "udp", 
+                        "ToPort": 8600
+                    }
+                ], 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "ConsulSecurityGroup"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::SecurityGroup"
+        }, 
+        "GatewayToInternet": {
+            "Properties": {
+                "InternetGatewayId": {
+                    "Ref": "InternetGateway"
+                }, 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::VPCGatewayAttachment"
+        }, 
+        "InboundEphemeralPublicNetworkAclEntry": {
+            "Properties": {
+                "CidrBlock": "0.0.0.0/0", 
+                "Egress": "false", 
+                "NetworkAclId": {
+                    "Ref": "PublicNetworkAcl"
+                }, 
+                "PortRange": {
+                    "From": 1024, 
+                    "To": 65535
+                }, 
+                "Protocol": 6, 
+                "RuleAction": "allow", 
+                "RuleNumber": 103
+            }, 
+            "Type": "AWS::EC2::NetworkAclEntry"
+        }, 
+        "InboundHTTPPublicNetworkAclEntry": {
+            "Properties": {
+                "CidrBlock": "0.0.0.0/0", 
+                "Egress": "false", 
+                "NetworkAclId": {
+                    "Ref": "PublicNetworkAcl"
+                }, 
+                "PortRange": {
+                    "From": 80, 
+                    "To": 80
+                }, 
+                "Protocol": 6, 
+                "RuleAction": "allow", 
+                "RuleNumber": 100
+            }, 
+            "Type": "AWS::EC2::NetworkAclEntry"
+        }, 
+        "InboundHTTPSPublicNetworkAclEntry": {
+            "Properties": {
+                "CidrBlock": "0.0.0.0/0", 
+                "Egress": "false", 
+                "NetworkAclId": {
+                    "Ref": "PublicNetworkAcl"
+                }, 
+                "PortRange": {
+                    "From": 443, 
+                    "To": 443
+                }, 
+                "Protocol": 6, 
+                "RuleAction": "allow", 
+                "RuleNumber": 101
+            }, 
+            "Type": "AWS::EC2::NetworkAclEntry"
+        }, 
+        "InboundPrivateNetworkAclEntry": {
+            "Properties": {
+                "CidrBlock": "0.0.0.0/0", 
+                "Egress": "false", 
+                "NetworkAclId": {
+                    "Ref": "PrivateNetworkAcl"
+                }, 
+                "PortRange": {
+                    "From": 0, 
+                    "To": 65535
+                }, 
+                "Protocol": -1, 
+                "RuleAction": "allow", 
+                "RuleNumber": 100
+            }, 
+            "Type": "AWS::EC2::NetworkAclEntry"
+        }, 
+        "InboundSSHPublicNetworkAclEntry": {
+            "Properties": {
+                "CidrBlock": "0.0.0.0/0", 
+                "Egress": "false", 
+                "NetworkAclId": {
+                    "Ref": "PublicNetworkAcl"
+                }, 
+                "PortRange": {
+                    "From": 22, 
+                    "To": 22
+                }, 
+                "Protocol": 6, 
+                "RuleAction": "allow", 
+                "RuleNumber": 102
+            }, 
+            "Type": "AWS::EC2::NetworkAclEntry"
+        }, 
+        "InternetGateway": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "InternetGateway"
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::InternetGateway"
+        }, 
+        "NATDevice1": {
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "AWSNATAMI", 
+                        {
+                            "Ref": "AWS::Region"
+                        }, 
+                        "AMI"
+                    ]
+                }, 
+                "InstanceType": {
+                    "Ref": "NATInstanceType"
+                }, 
+                "KeyName": {
+                    "Ref": "KeyName"
+                }, 
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": "true", 
+                        "DeleteOnTermination": "true", 
+                        "Description": "ENI for NAT device", 
+                        "DeviceIndex": 0, 
+                        "GroupSet": [
+                            {
+                                "Ref": "NATSecurityGroup"
+                            }
+                        ], 
+                        "PrivateIpAddress": "10.0.0.4", 
+                        "SubnetId": {
+                            "Ref": "PublicSubnet0"
+                        }
+                    }
+                ], 
+                "SourceDestCheck": "false", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "NATDevice1"
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::Instance"
+        }, 
+        "NATDevice2": {
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "AWSNATAMI", 
+                        {
+                            "Ref": "AWS::Region"
+                        }, 
+                        "AMI"
+                    ]
+                }, 
+                "InstanceType": {
+                    "Ref": "NATInstanceType"
+                }, 
+                "KeyName": {
+                    "Ref": "KeyName"
+                }, 
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": "true", 
+                        "DeleteOnTermination": "true", 
+                        "Description": "ENI for NAT device", 
+                        "DeviceIndex": 0, 
+                        "GroupSet": [
+                            {
+                                "Ref": "NATSecurityGroup"
+                            }
+                        ], 
+                        "PrivateIpAddress": "10.0.1.4", 
+                        "SubnetId": {
+                            "Ref": "PublicSubnet1"
+                        }
+                    }
+                ], 
+                "SourceDestCheck": "false", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "NATDevice2"
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::Instance"
+        }, 
+        "NATDevice3": {
+            "Properties": {
+                "ImageId": {
+                    "Fn::FindInMap": [
+                        "AWSNATAMI", 
+                        {
+                            "Ref": "AWS::Region"
+                        }, 
+                        "AMI"
+                    ]
+                }, 
+                "InstanceType": {
+                    "Ref": "NATInstanceType"
+                }, 
+                "KeyName": {
+                    "Ref": "KeyName"
+                }, 
+                "NetworkInterfaces": [
+                    {
+                        "AssociatePublicIpAddress": "true", 
+                        "DeleteOnTermination": "true", 
+                        "Description": "ENI for NAT device", 
+                        "DeviceIndex": 0, 
+                        "GroupSet": [
+                            {
+                                "Ref": "NATSecurityGroup"
+                            }
+                        ], 
+                        "PrivateIpAddress": "10.0.2.4", 
+                        "SubnetId": {
+                            "Ref": "PublicSubnet2"
+                        }
+                    }
+                ], 
+                "SourceDestCheck": "false", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "NATDevice3"
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::Instance"
+        }, 
+        "NATSecurityGroup": {
+            "Properties": {
+                "GroupDescription": "Enables internal access to the NAT device", 
+                "SecurityGroupEgress": [
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 80, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 80
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 443, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 443
+                    }
+                ], 
+                "SecurityGroupIngress": [
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 22, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 22
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 80, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 80
+                    }, 
+                    {
+                        "CidrIp": "0.0.0.0/0", 
+                        "FromPort": 443, 
+                        "IpProtocol": "tcp", 
+                        "ToPort": 443
+                    }
+                ], 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "NATSecurityGroup"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::SecurityGroup"
+        }, 
+        "OutBoundPrivateNetworkAclEntry": {
+            "Properties": {
+                "CidrBlock": "0.0.0.0/0", 
+                "Egress": "true", 
+                "NetworkAclId": {
+                    "Ref": "PrivateNetworkAcl"
+                }, 
+                "PortRange": {
+                    "From": 0, 
+                    "To": 65535
+                }, 
+                "Protocol": -1, 
+                "RuleAction": "allow", 
+                "RuleNumber": 100
+            }, 
+            "Type": "AWS::EC2::NetworkAclEntry"
+        }, 
+        "OutboundPublicNetworkAclEntry": {
+            "Properties": {
+                "CidrBlock": "0.0.0.0/0", 
+                "Egress": "true", 
+                "NetworkAclId": {
+                    "Ref": "PublicNetworkAcl"
+                }, 
+                "PortRange": {
+                    "From": 0, 
+                    "To": 65535
+                }, 
+                "Protocol": -1, 
+                "RuleAction": "allow", 
+                "RuleNumber": 100
+            }, 
+            "Type": "AWS::EC2::NetworkAclEntry"
+        }, 
+        "PrivateNetworkAcl": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PrivateNetworkAcl"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::NetworkAcl"
+        }, 
+        "PrivateRoute1": {
+            "Properties": {
+                "DestinationCidrBlock": "0.0.0.0/0", 
+                "InstanceId": {
+                    "Ref": "NATDevice1"
+                }, 
+                "RouteTableId": {
+                    "Ref": "PrivateRouteTable1"
+                }
+            }, 
+            "Type": "AWS::EC2::Route"
+        }, 
+        "PrivateRoute2": {
+            "Properties": {
+                "DestinationCidrBlock": "0.0.0.0/0", 
+                "InstanceId": {
+                    "Ref": "NATDevice2"
+                }, 
+                "RouteTableId": {
+                    "Ref": "PrivateRouteTable2"
+                }
+            }, 
+            "Type": "AWS::EC2::Route"
+        }, 
+        "PrivateRoute3": {
+            "Properties": {
+                "DestinationCidrBlock": "0.0.0.0/0", 
+                "InstanceId": {
+                    "Ref": "NATDevice3"
+                }, 
+                "RouteTableId": {
+                    "Ref": "PrivateRouteTable3"
+                }
+            }, 
+            "Type": "AWS::EC2::Route"
+        }, 
+        "PrivateRouteTable1": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PrivateRouteTable1"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::RouteTable"
+        }, 
+        "PrivateRouteTable2": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PrivateRouteTable2"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::RouteTable"
+        }, 
+        "PrivateRouteTable3": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PrivateRouteTable3"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::RouteTable"
+        }, 
+        "PrivateSubnet0": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Join": [
+                        "", 
+                        [
+                            {
+                                "Ref": "AWS::Region"
+                            }, 
+                            {
+                                "Fn::Select": [
+                                    0, 
+                                    {
+                                        "Ref": "AvailabilityZones"
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                }, 
+                "CidrBlock": "10.0.16.0/20", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PrivateSubnet0"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::Subnet"
+        }, 
+        "PrivateSubnet0PrivateSubnetNetworkAclAssociation": {
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "PrivateNetworkAcl"
+                }, 
+                "SubnetId": {
+                    "Ref": "PrivateSubnet0"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetNetworkAclAssociation"
+        }, 
+        "PrivateSubnet0PrivateSubnetRouteTableAssociation": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateRouteTable1"
+                }, 
+                "SubnetId": {
+                    "Ref": "PrivateSubnet0"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        }, 
+        "PrivateSubnet1": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Join": [
+                        "", 
+                        [
+                            {
+                                "Ref": "AWS::Region"
+                            }, 
+                            {
+                                "Fn::Select": [
+                                    1, 
+                                    {
+                                        "Ref": "AvailabilityZones"
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                }, 
+                "CidrBlock": "10.0.32.0/20", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PrivateSubnet1"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::Subnet"
+        }, 
+        "PrivateSubnet1PrivateSubnetNetworkAclAssociation": {
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "PrivateNetworkAcl"
+                }, 
+                "SubnetId": {
+                    "Ref": "PrivateSubnet1"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetNetworkAclAssociation"
+        }, 
+        "PrivateSubnet1PrivateSubnetRouteTableAssociation": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateRouteTable2"
+                }, 
+                "SubnetId": {
+                    "Ref": "PrivateSubnet1"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        }, 
+        "PrivateSubnet2": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Join": [
+                        "", 
+                        [
+                            {
+                                "Ref": "AWS::Region"
+                            }, 
+                            {
+                                "Fn::Select": [
+                                    2, 
+                                    {
+                                        "Ref": "AvailabilityZones"
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                }, 
+                "CidrBlock": "10.0.48.0/20", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PrivateSubnet2"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::Subnet"
+        }, 
+        "PrivateSubnet2PrivateSubnetNetworkAclAssociation": {
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "PrivateNetworkAcl"
+                }, 
+                "SubnetId": {
+                    "Ref": "PrivateSubnet2"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetNetworkAclAssociation"
+        }, 
+        "PrivateSubnet2PrivateSubnetRouteTableAssociation": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PrivateRouteTable3"
+                }, 
+                "SubnetId": {
+                    "Ref": "PrivateSubnet2"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        }, 
+        "PublicNetworkAcl": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PublicNetworkAcl"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::NetworkAcl"
+        }, 
+        "PublicRoute": {
+            "DependsOn": "GatewayToInternet", 
+            "Properties": {
+                "DestinationCidrBlock": "0.0.0.0/0", 
+                "GatewayId": {
+                    "Ref": "InternetGateway"
+                }, 
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }
+            }, 
+            "Type": "AWS::EC2::Route"
+        }, 
+        "PublicRouteTable": {
+            "Properties": {
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PublicRouteTable"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::RouteTable"
+        }, 
+        "PublicSubnet0": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Join": [
+                        "", 
+                        [
+                            {
+                                "Ref": "AWS::Region"
+                            }, 
+                            {
+                                "Fn::Select": [
+                                    0, 
+                                    {
+                                        "Ref": "AvailabilityZones"
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                }, 
+                "CidrBlock": "10.0.0.0/24", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PublicSubnet0"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::Subnet"
+        }, 
+        "PublicSubnet0PublicRouteTableAssociation": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }, 
+                "SubnetId": {
+                    "Ref": "PublicSubnet0"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        }, 
+        "PublicSubnet0PublicSubnetNetworkAclAssociation": {
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "PublicNetworkAcl"
+                }, 
+                "SubnetId": {
+                    "Ref": "PublicSubnet0"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetNetworkAclAssociation"
+        }, 
+        "PublicSubnet1": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Join": [
+                        "", 
+                        [
+                            {
+                                "Ref": "AWS::Region"
+                            }, 
+                            {
+                                "Fn::Select": [
+                                    1, 
+                                    {
+                                        "Ref": "AvailabilityZones"
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                }, 
+                "CidrBlock": "10.0.1.0/24", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PublicSubnet1"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::Subnet"
+        }, 
+        "PublicSubnet1PublicRouteTableAssociation": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }, 
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        }, 
+        "PublicSubnet1PublicSubnetNetworkAclAssociation": {
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "PublicNetworkAcl"
+                }, 
+                "SubnetId": {
+                    "Ref": "PublicSubnet1"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetNetworkAclAssociation"
+        }, 
+        "PublicSubnet2": {
+            "Properties": {
+                "AvailabilityZone": {
+                    "Fn::Join": [
+                        "", 
+                        [
+                            {
+                                "Ref": "AWS::Region"
+                            }, 
+                            {
+                                "Fn::Select": [
+                                    2, 
+                                    {
+                                        "Ref": "AvailabilityZones"
+                                    }
+                                ]
+                            }
+                        ]
+                    ]
+                }, 
+                "CidrBlock": "10.0.2.0/24", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": "PublicSubnet2"
+                    }
+                ], 
+                "VpcId": {
+                    "Ref": "VPC"
+                }
+            }, 
+            "Type": "AWS::EC2::Subnet"
+        }, 
+        "PublicSubnet2PublicRouteTableAssociation": {
+            "Properties": {
+                "RouteTableId": {
+                    "Ref": "PublicRouteTable"
+                }, 
+                "SubnetId": {
+                    "Ref": "PublicSubnet2"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetRouteTableAssociation"
+        }, 
+        "PublicSubnet2PublicSubnetNetworkAclAssociation": {
+            "Properties": {
+                "NetworkAclId": {
+                    "Ref": "PublicNetworkAcl"
+                }, 
+                "SubnetId": {
+                    "Ref": "PublicSubnet2"
+                }
+            }, 
+            "Type": "AWS::EC2::SubnetNetworkAclAssociation"
+        }, 
+        "VPC": {
+            "Properties": {
+                "CidrBlock": "10.0.0.0/16", 
+                "Tags": [
+                    {
+                        "Key": "Name", 
+                        "Value": {
+                            "Fn::Join": [
+                                "", 
+                                [
+                                    "vpc-consul-", 
+                                    {
+                                        "Ref": "AWS::Region"
+                                    }
+                                ]
+                            ]
+                        }
+                    }
+                ]
+            }, 
+            "Type": "AWS::EC2::VPC"
+        }
+    }
+}

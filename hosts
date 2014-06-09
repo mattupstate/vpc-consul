@@ -1,0 +1,32 @@
+#!/usr/bin/python
+
+import os
+import json
+
+data = {
+    'bastion': {
+        'hosts': [os.environ.get('BASTION_HOST_IP', '127.0.0.1')]
+    },
+    'consul_servers': {
+        'hosts': ['10.0.32.4', '10.0.48.4'],
+        'vars': {
+            'consul_server': True,
+            'consul_config_dir': '/etc/consul',
+            'consul_data_dir': '/var/consul/data',
+            'consul_join': '10.0.16.4',
+            'consul_bootstrap': False
+        }
+    },
+    'consul_lead': {
+        'hosts': ['10.0.16.4'],
+        'vars': {
+            'consul_server': True,
+            'consul_config_dir': '/etc/consul',
+            'consul_data_dir': '/var/consul/data',
+            'consul_join': False,
+            'consul_bootstrap': True
+        }
+    }
+}
+
+print(json.dumps(data))

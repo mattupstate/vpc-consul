@@ -1,0 +1,110 @@
+---
+- hosts: consul_lead:consul_servers
+  remote_user: ubuntu
+  sudo: yes
+
+  tasks:
+  - name: Get ec2 facts
+    action: ec2_facts
+
+  - name: Set hostname
+    hostname: name=consul-server-{{ ansible_ec2_local_ipv4|replace('.', '-') }}
+
+  - name: Update apt cache
+    apt: update_cache=yes cache_valid_time=86400
+
+  - name: Install system packages
+    apt: name={{ item }}
+    with_items:
+      - unzip
+      - dnsmasq
+      - python-dev
+      - python-pip
+
+  - name: Download Consul
+    get_url:
+      url: https://dl.bintray.com/mitchellh/consul/0.2.1_linux_amd64.zip
+      dest: /tmp/consul.zip
+
+  - name: Extract Consul
+    command: unzip -n -d /bin /tmp/consul.zip creates=/bin/consul
+
+  - name: Create Consul config folder
+    file: path={{ consul_config_dir }} state=directory
+
+  - name: Create Consul data dir
+    file: path={{ consul_data_dir }} mode=755 state=directory
+
+  - name: Install Supervisor
+    pip: name=supervisor
+
+  - name: Create supervisord config folder
+    file: dest=/etc/supervisor state=directory
+
+  - name: Create supervisord config
+    copy: src=files/supervisord.conf dest=/etc/supervisord.conf
+
+  - name: Create supervisord init script
+    copy: src=files/supervisord.init dest=/etc/init.d/supervisord mode=0755
+
+  - name: Start supervisord service and have it run during system startup
+    service: name=supervisord state=started enabled=yes
+
+  - name: Configure Dnsmasq
+    copy: content='server=/consul/127.0.0.1#8600' dest=/etc/dnsmasq.d/10-consul
+    notify:
+      - restart dnsmasq
+
+  handlers:
+    - name: restart dnsmasq
+      service: name=dnsmasq state=restarted enabled=yes
+
+- hosts: consul_lead
+  remote_user: ubuntu
+  sudo: yes
+
+  tasks:
+  - name: Get EC2 facts
+    action: ec2_facts
+
+  - name: Create Consul config
+    template: src=templates/consul.json dest={{ consul_config_dir }}/consul.json
+    notify:
+      - restart consul
+
+  - name: Create Consul supervisor config
+    template: src=templates/consul.ini dest=/etc/supervisor/consul.ini
+    notify:
+      - restart consul
+
+  - name: Enabled Consul service
+    supervisorctl: name=consul state=started
+
+  handlers:
+    - name: restart consul
+      supervisorctl: name=consul state=restarted
+
+- hosts: consul_servers
+  remote_user: ubuntu
+  sudo: yes
+
+  tasks:
+  - name: Get EC2 facts
+    action: ec2_facts
+
+  - name: Create Consul config
+    template: src=templates/consul.json dest={{ consul_config_dir }}/consul.json
+    notify:
+      - restart consul
+
+  - name: Create Consul supervisor config
+    template: src=templates/consul.ini dest=/etc/supervisor/consul.ini
+    notify:
+      - restart consul
+
+  - name: Enabled Consul service
+    supervisorctl: name=consul state=started
+
+  handlers:
+    - name: restart consul
+      supervisorctl: name=consul state=restarted
