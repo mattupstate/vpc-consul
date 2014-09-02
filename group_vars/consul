@@ -1,0 +1,4 @@
+---
+consul_join: 10.0.16.4
+consul_config_dir: /etc/consul
+consul_data_dir: /var/consul/data

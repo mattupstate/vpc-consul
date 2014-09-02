@@ -1,7 +1,6 @@
 ---
 - hosts: bastion
   remote_user: ubuntu
-  # sudo_user: ubuntu
   sudo: yes
 
   tasks:
@@ -17,7 +16,13 @@
   - name: Install Ansible
     pip: name=ansible
 
-  - name: Copy Consul provisioning playbooks
+  - name: Copy Ansible vars
+    copy: src={{ item }} dest=/home/ubuntu owner=ubuntu group=ubuntu
+    with_items:
+      - group_vars
+      - host_vars
+
+  - name: Copy Ansible files
     copy: src={{ item }} dest=/home/ubuntu/{{ item }} owner=ubuntu group=ubuntu
     with_items:
       - provision_consul.yaml
