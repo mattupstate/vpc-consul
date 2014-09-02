@@ -24,8 +24,16 @@
       url: https://dl.bintray.com/mitchellh/consul/0.3.1_linux_amd64.zip
       dest: /tmp/consul.zip
 
+  - name: Download Consul UI
+    get_url:
+      url: https://dl.bintray.com/mitchellh/consul/0.3.1_web_ui.zip
+      dest: /tmp/consul-ui.zip
+
   - name: Extract Consul
     command: unzip -n -d /bin /tmp/consul.zip creates=/bin/consul
+
+  - name: Extract Consul UI
+    command: unzip -n -d /var/consul/ui /tmp/consul-ui.zip creates={{ consul_ui_dir }}
 
   - name: Create Consul config folder
     file: path={{ consul_config_dir }} state=directory
